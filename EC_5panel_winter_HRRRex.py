@@ -685,7 +685,7 @@ for i in range(1,49):
     ax16.add_feature(cfeature.STATES.with_scale('10m'))
 
     hgt_frz = ax16.contourf(x,y,hgt0c,cmap='rainbow',levels=range(0,10000,500),extend='max')
-    cbar2 = fig9.colorbar(hgt_frz,orientation='vertical', pad = 0.01, aspect = 50, ax = ax16, extendrect=False)
+    cbar2 = fig9.colorbar(hgt_frz,orientation='vertical', pad = 0.01, aspect = 50, ax = ax16, extendrect=False,shrink=0.7)
     cbr.set_label('Freezing Level Height (ft)')
 
     ax16.set_title('Freezing Level Height')
