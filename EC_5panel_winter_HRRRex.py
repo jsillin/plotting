@@ -18,93 +18,19 @@ from metpy.units import units
 import scipy.ndimage as ndimage
 from metpy.plots import USCOUNTIES
 import matplotlib.patches as mpatches
+import supplementary_tools as spt
 
-
-def wet_bulb(temp,dewpoint):
-    tdd = temp-dewpoint
-    wet_bulb = temp-((1/3)*tdd)
-    return wet_bulb
-
-def fram(ice,wet_bulb,velocity):
-    ilr_p = ice
-    ilr_t = (-0.0071*(wet_bulb**3))-(0.039*(wet_bulb**2))-(0.3904*wet_bulb)+0.5545
-    ilr_v = (0.0014*(velocity**2))+(0.0027*velocity)+0.7574
-
-    cond_1 = np.ma.masked_where(wet_bulb>-0.35,ice)
-    cond_2 = np.ma.masked_where((wet_bulb<-0.35) & (velocity>12.),ice)
-    cond_3 = np.ma.masked_where((wet_bulb<-0.35) & (velocity<=12.),ice)
-
-    cond_1 = cond_1.filled(0)
-    cond_2 = cond_2.filled(0)
-    cond_3 = cond_3.filled(0)
-
-    ilr_1 = (0.7*ilr_p)+(0.29*ilr_t)+(0.01*ilr_v)
-    ilr_2 = (0.73*ilr_p)+(0.01*ilr_t)+(0.26*ilr_v)
-    ilr_3 = (0.79*ilr_p)+(0.2*ilr_t)+(0.01*ilr_v)
-
-    accretion_1 = cond_1*ilr_1
-    accretion_2 = cond_2*ilr_2
-    accretion_3 = cond_3*ilr_3
-
-    total_accretion=accretion_1+accretion_2+accretion_3
-    return total_accretion
-
-def mkdir_p(mypath):
-    '''Creates a directory. equivalent to using mkdir -p on the command line'''
-
-    from errno import EEXIST
-    from os import makedirs,path
-
-    try:
-        makedirs(mypath)
-    except OSError as exc: # Python >2.5
-        if exc.errno == EEXIST and path.isdir(mypath):
-            pass
-        else: raise
-
-startTime=datetime.now()
-
-year = startTime.year
-
-if startTime.month <10:
-    month = '0'+str(startTime.month)
-else:
-    month = str(startTime.month)
-
-if startTime.day <10:
-    day = '0'+str(startTime.day)
-else:
-    day = str(startTime.day)
-
-if startTime.hour <10:
-    hour = '0'+str(startTime.hour)
-else:
-    hour = str(startTime.hour)
-
-mdate = str(year)+str(month)+str(day)
-
-def get_init_hr(hour):
-    if int(hour) <3:
-        init_hour = '00'
-    elif int(hour) <9:
-        init_hour = '06'
-    elif int(hour) <15:
-        init_hour = '12'
-    elif int(hour) <21:
-        init_hour = '18'
-    else:
-        init_hour = '00'
-    return(init_hour)
-init_hour = get_init_hr(hour)
-url = 'http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr'+mdate+'/hrrr_sfc.t'+get_init_hr(hour)+'z'
+mdate = spt.get_init_time('HRRR')[0]
+init_hour = spt.get_init_time('HRRR')[1]
+url = 'http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr'+mdate+'/hrrr_sfc.t'+init_hour+'z'
 #url='http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr20201231/hrrr_sfc.t00z'
 print(url)
 
 # Create new directory
-output_dir = str(year)+str(month)+str(day)+'_'+str(init_hour)+'00'
+output_dir = mdate+'_'+init_hour+'00'
 #output_dir = '20201231_0000'
-mkdir_p(output_dir)
-mkdir_p(output_dir+'/HRRR_ex')
+spt.mkdir_p(output_dir)
+spt.mkdir_p(output_dir+'/HRRR_ex')
 #Parse data using MetPy
 ds = xr.open_dataset(url)
 init_hr = dt.datetime(int(year),int(month),int(day),int(init_hour))
@@ -139,10 +65,10 @@ td2mi = ds['tmp2m'].isel(time=1).squeeze()-273.15
 u10 = ds['ugrd10m'].isel(time=1).squeeze()*1.94384449
 v10 = ds['vgrd10m'].isel(time=1).squeeze()*1.94384449
 ws10 = ((u10**2)+(v10**2))**.5
-acc_fram = fram(acc_ice,wet_bulb(t2mi,td2mi),ws10)
+acc_fram = spt.fram(acc_ice,spt.wet_bulb(t2mi,td2mi),ws10)
 print("INITIALIZATION SUCCESSFUL")
 
-for i in range(1,49):
+for i in range(0,49):
     fc_hr = init_hr+dt.timedelta(hours=1*i)
     forecast_hour = times[0].values
 
@@ -198,7 +124,7 @@ for i in range(1,49):
     td2mc = td2m-273.15
     td2m = ((td2m - 273.15)*(9./5.))+32.
     td2ms = ndimage.gaussian_filter(td2m,sigma=5,order=0)
-    wb2mc = wet_bulb(t2mc,td2mc)
+    wb2mc = spt.wet_bulb(t2mc,td2mc)
     #wb2mc = (wb2m-32.)*(5./9.)
 
     swg = data['sfcgust'].squeeze()
@@ -234,25 +160,64 @@ for i in range(1,49):
 
     mslpc = data['mslp'].squeeze()/100
     mslpc=ndimage.gaussian_filter(mslpc,sigma=3,order=0)
-    wind_slice = slice(35,-35,35)
-    wind_slice_ne = slice(15,-15,15)
-    wind_slice_me = slice(10,-10,10)
+    smoothedsnow = ndimage.gaussian_filter(snow.filled(0),sigma=1,order=0)
+    wind_slice = slice(36,-36,36)
+    wind_slice_ne = slice(18,-18,18)
+    wind_slice_me = slice(9,-9,9)
     u_10m = data['u'].squeeze()
     v_10m = data['v'].squeeze()
     u_10m = u_10m*1.94384449
     v_10m = v_10m*1.94384449
     wspd = ((u_10m**2)+(v_10m**2))**.5
 
+    blank = np.ones(np.shape(swg))
+
+    blizzard = np.ma.masked_where((smoothedsnow>10)&(swg>30)|(swg==30)&(vis<0.25)|(vis==0.25),blank)
+    blizzard = blizzard.filled(3)
+    blizzard = np.ma.masked_where((smoothedsnow>10)&(swg>20)&(swg<30)&(vis<0.5)*(vis>0.25),blizzard)
+    blizzard = blizzard.filled(2)
+
+    print(np.max(blizzard))
+
     ###COMPUTE ICE ACCRETION###
 
-    fram_accretion=fram(qice,wb2mc,wspd)
+    fram_accretion=spt.fram(qice,wb2mc,wspd)
     fram_accretion=fram_accretion.filled(0)
     acc_fram = acc_fram+fram_accretion
+
+    ###GRAB LOCAL DATA###
+    stations=['PWM','AUG','RKD','SFM','IZG','LEW','EEN','MHT','BML','CVA','1P1','FAR','BGR','GNR','CAR','MAC',
+            'RUT','BTV','CDA','ORH','TAN','BAF','BOS','ALB','SYR','ROC','ITH','ART','MSV','HFD','BDL','OKX',
+            'PVD','YSC']
+    coords=[[43.644940, -70.309360],[44.317911, -69.796462],[44.062355, -69.095368],[43.398890, -70.711034],
+            [43.989267, -70.946733],[44.047577, -70.284566],[42.901405, -72.269613],[42.929656, -71.434166],
+            [44.577748, -71.177514],[45.084798, -70.217251],[43.778606, -71.753213],[44.670005, -70.151436],
+            [44.807750, -68.818231],[45.463921, -69.553345],[45.463921, -69.553345],[44.727026, -67.473533],
+            [43.527006, -72.949843],[44.466761, -73.141541],[44.570582, -72.017706],[44.466761, -73.141541],
+            [42.266704, -71.873740],[41.873395, -71.015191],[42.159667, -72.715977],[42.358814, -71.057869],
+            [42.749352, -73.804664],[43.112376, -76.110738],[43.122772, -77.672485],[42.490250, -76.457773],
+            [43.992712, -76.022970],[41.702975, -74.798589],[41.737535, -72.649142],[41.478649, -73.135379],
+            [41.724628, -71.427676],[45.438474, -71.691100]]
+
+
+    station_qpf = []
+    station_temp = []
+    print(len(stations))
+    print(len(coords))
+    for i in range(len(stations)):
+        station = stations[i]
+        lat = coords[i][0]
+        lon = coords[i][1]
+        qpf = total_precip.interp(lat=lat,lon=lon).values
+        temp = t2m.interp(lat=lat,lon=lon).values
+        station_qpf.append(np.round(qpf,1))
+        station_temp.append(np.round(temp,1))
 
     ########## SET UP FIGURE ##################################################
     fig = plt.figure(figsize=(44,15))
 
     gs = fig.add_gridspec(ncols=3,nrows= 2, width_ratios=[1,2,1])
+    gs.update(hspace=0.01,wspace=0.01)
     ax1 = fig.add_subplot(gs[:, 1], projection = zH5_crs)
     ax2 = fig.add_subplot(gs[0, 0], projection = zH5_crs)
     ax3 = fig.add_subplot(gs[1, 0], projection = zH5_crs)
@@ -316,7 +281,7 @@ for i in range(1,49):
     #cax2 = fig.add_axes([.35,.75,.02,.25])
 
     refp = ax4.contourf(x,y,reflectivity, levels=[20, 25, 30, 35, 40, 45, 50, 55, 60, 65], alpha = 0.7, cmap = 'Greens',transform=zH5_crs) #colors=['#0099ff00', '#4D8080ff', '#666666ff', '#804d4dff','#993333ff','#B33333ff','#CC1a1aff','#E60000ff','#0000e6','#0000cc','#0000b3','#2d00b3','#5900b3','#8600b3','#b300b3','#b30086'])
-    capep = ax4.contourf(x, y, cape, levels=[100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000], alpha = 0.7, cmap='RdPu')#['#0099ff00', '#4066ffb3', '#8066ff8c', '#BF66ff66','#8cff66','#b3ff66','#d9ff66','#ffff66','#ffd966','#ffcc66','#ffb366','#ff8c66','#ff6666','#ff668c','#ff66b3','#ff66d9','#ff66ff'])
+    capep = ax4.contourf(x, y, cape, levels=[25,50,75,100,150, 250, 500, 750, 1000], extend='max', alpha = 0.7, cmap='RdPu')#['#0099ff00', '#4066ffb3', '#8066ff8c', '#BF66ff66','#8cff66','#b3ff66','#d9ff66','#ffff66','#ffd966','#ffcc66','#ffb366','#ff8c66','#ff6666','#ff668c','#ff66b3','#ff66d9','#ff66ff'])
     lgt = ax4.contour(x,y,lightning,levels=[0.5,1,1.5,2,2.5,3,3.5,4,4.5,5])
     cb = fig.colorbar(capep, orientation='vertical', pad = 0.01, aspect = 50, ax = ax4, extendrect=False, ticks=[100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000])
     cb.set_label('CAPE (J/kg)', size='large')
@@ -330,10 +295,20 @@ for i in range(1,49):
     leg.set_zorder(100)
 
     swgc = ax5.contourf(x,y,swg, levels=range(0,60,5), cmap = 'hot')
+    sw3g = ax5.contour(x,y,swg,levels=[30],colors=['lime'],linewidths=1.5)
+    visc = ax5.contour(x,y,vis,levels=[0.25],colors=['violet'],linewidths=1.5)
+    try:
+        sn = ax5.contour(x,y,smoothedsnow,cmap='cool',levels=[15],linewidths=1.5)
+    except:
+        print('no snow')
     cbar4 = fig.colorbar(swgc, orientation='vertical',pad=0.01,ax=ax5, aspect = 50, extendrect=False, ticks = np.arange(0,70,10))
+    blue = mpatches.Patch(color='dodgerblue',label='Snow')
+    lime = mpatches.Patch(color='lime', label='35 mph Gusts')
+    pink = mpatches.Patch(color='violet', label='1/4mi Visibility')
+    leg = ax5.legend(handles=[blue,lime,pink],loc=4,title='Blizzard Ingredients',framealpha=1)
     cbar4.set_label('Surface Wind Gust (kts)')
 
-    ax1.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
+    ax1.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=6)
     ax1.set_title('Precip Type, 2m Temperature (F), 10m Winds (kts), and MSLP (mb)',fontsize=14)
     ax1.set_title('\n Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=11,loc='right')
     ax1.set_title('\n HRRR Init: '+init_time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11,loc='left')
@@ -350,19 +325,20 @@ for i in range(1,49):
     blue = mpatches.Patch(color='#119579', label='High Clouds')
     green = mpatches.Patch(color='#25e935', label='Mid-Level Clouds')
     purple = mpatches.Patch(color='#ae14c2',label='Low-Level Clouds')
-    leg = ax2.legend(handles=[blue,green,purple],loc=3,framealpha=1)
+    leg = ax2.legend(handles=[blue,green,purple],loc=4,framealpha=1)
     leg.set_zorder(100)
     tccp = ax2.contourf(x,y,cloudcover,cmap='Greys',levels=cloud_levs,alpha=0,extend='max')
     lccp = ax2.contourf(x,y,low_cloud, colors=low_cols,levels=cloud_levs,alpha = 0.35,extend='max')
     mccp = ax2.contourf(x,y,mid_cloud, colors=mid_cols,levels=cloud_levs,alpha = 0.25,extend='max')
     hccp = ax2.contourf(x,y,high_cloud, colors=high_cols,levels=cloud_levs,alpha = 0.15,extend='max')#colors=['dimgray','gray','darkgray','slategrey','silver','lightgray'])
-    cbar2 = fig.colorbar(tccp,orientation='vertical',pad=0.01,ax=ax2,shrink=.8,aspect=50,extendrect=False, ticks=np.arange(10,100,10))
+    cbar2 = fig.colorbar(tccp,orientation='vertical',pad=0.01,ax=ax2,aspect=50,extendrect=False, ticks=np.arange(10,100,10))
     cbar2.set_label('Cloud Cover (%)',fontsize=14)
 
     tprecip = ax3.contourf(x,y,total_precip, alpha = 0.7, cmap = 'cool',transform=zH5_crs, levels=[0.01,0.1,0.25,0.5,0.75,1.0,1.25,1.5,2.0,2.5,3,3.5,4,4.5,5])
-    tcprecip = ax3.contour(x,y,total_precip,colors=['b','darkblue','darkviolet'],levels=[0.5,1,1.5],linewidths=2)
-    cbar3 = fig.colorbar(tprecip,orientation='vertical',pad=0.01,shrink=.8,ax=ax3,aspect=50,extendrect=False,ticks=[0.01,0.1,0.25,0.5,0.75,1.0,1.25,1.5,2.0,2.5,3,3.5,4,4.5,5])
+    tcprecip = ax3.contour(x,y,total_precip,colors=['b','darkblue','darkviolet'],levels=[0.5,1,1.5],linewidths=1.5)
+    cbar3 = fig.colorbar(tprecip,orientation='vertical',pad=0.01,ax=ax3,aspect=50,extendrect=False,ticks=[0.01,0.1,0.25,0.5,0.75,1.0,1.25,1.5,2.0,2.5,3,3.5,4,4.5,5])
     cbar3.set_label('Total Precipitation (inches)',fontsize=14)
+
 
     #refp3 = ax4.contourf(x,y,reflectivity, levels=[20, 25, 30, 35, 40, 45, 50, 55, 60, 65], alpha = 0.7, cmap = 'Greens',transform=zH5_crs)
     #cbar4 = fig.colorbar(tccp,orientation='horizontal',pad=0.01,ax=ax4,aspect=50,extendrect=False)
@@ -380,21 +356,27 @@ for i in range(1,49):
     sub_n = 50
     sub_s = 25
 
-    ax1.set_extent((sub_w1, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
+    ax1.set_extent((sub_w1-1, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax2.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax3.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax4.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax5.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     #fig.canvas.draw()
     fig.tight_layout()
-    plt.savefig(output_dir+'/HRRR_ex/EC_fivepanelwinter_'+dtfs+'_.png')
-    ax1.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=7)
+    plt.savefig(output_dir+'/HRRR_ex/EC_fivepanelwinter9_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    ax1.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=6)
     ax1.set_extent((281, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax2.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax3.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax4.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax5.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/HRRR_ex/NE_fivepanelwinter_'+dtfs+'_.png')
+    for i in range(len(stations)):
+        station = stations[i]
+        lat = coords[i][0]
+        lon = coords[i][1]
+        ax3.text(360+lon,lat,str(station_qpf[i]),ha='center',transform=zH5_crs)
+        ax1.text(360+lon,lat,str(station_temp[i]),ha='center',transform=zH5_crs)
+    plt.savefig(output_dir+'/HRRR_ex/NE_fivepanelwinter9_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
 
     plt.clf()
@@ -435,18 +417,18 @@ for i in range(1,49):
     except:
         print('no ice')
 
-    ax6.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
+    ax6.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=6)
     ax6.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax6.set_title('HRRR Composite Forecast valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/HRRR_ex/EC_ptype_composite_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/EC_ptype_composite_'+dtfs+'_.png',bbox_inches='tight')
     ax6.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
-    ax6.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=7)
-    plt.savefig(output_dir+'/HRRR_ex/NE_ptype_composite_'+dtfs+'_.png')
+    ax6.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=6)
+    plt.savefig(output_dir+'/HRRR_ex/NE_ptype_composite_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax6.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
     wsl = slice(5,-5,5)
-    ax6.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=7)
+    ax6.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=6)
     ax6.set_extent((289,291,43,45))
-    plt.savefig(output_dir+'/HRRR_ex/local_ptype_composite_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_ptype_composite_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
     plt.close()
@@ -468,7 +450,12 @@ for i in range(1,49):
 
     ax7.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax7.set_title('HRRR Precipitation Forecast Valid Through ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/HRRR_ex/EC_total_precip_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/EC_total_precip_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    ax7.set_extent((281, 295, 39, 49))
+    plt.savefig(output_dir+'/HRRR_ex/NE_total_precip_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    ax7.set_extent((289,291,43,45))
+    ax7.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
+    plt.savefig(output_dir+'/HRRR_ex/local_total_precip_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
     ### FOURTH PLOT ###
@@ -483,20 +470,20 @@ for i in range(1,49):
     cbr = fig4.colorbar(sfcwinds, orientation = 'vertical', pad = 0.01, aspect = 25,
                         panchor = (0.999,0.5), ax = ax8, extendrect=False, ticks = range(5,75,5), shrink = 0.80)
     cbr.set_label('10m Wind Speed (kts)')
-    ax8.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
+    ax8.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=6)
     ax8.set_title('HRRR 10m Wind Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
     ax8.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
 
     h_contouqr = ax8.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
     h_contouqr.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
 
-    plt.savefig(output_dir+'/HRRR_ex/EC_wind_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/EC_wind_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax8.set_extent((281, 295, 39, 49))
-    plt.savefig(output_dir+'/HRRR_ex/NE_wind_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/NE_wind_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax8.set_extent((289,291,43,45))
-    ax8.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=7)
+    ax8.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=6)
     ax8.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_wind_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_wind_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
     plt.close()
@@ -523,12 +510,12 @@ for i in range(1,49):
     cbar2 = fig.colorbar(tccp,orientation='vertical',pad=0.01,ax=ax9,shrink=.8,aspect=50,extendrect=False, ticks=np.arange(10,100,10))
     cbar2.set_label('Cloud Cover (%)',fontsize=14)
     ax9.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/HRRR_ex/EC_clouds_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/EC_clouds_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax9.set_extent((281, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/HRRR_ex/NE_clouds_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/NE_clouds_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax9.set_extent((289,291,43,45))
     ax9.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_clouds_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_clouds_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
     plt.close()
     plt.clf()
@@ -609,12 +596,12 @@ for i in range(1,49):
     ax12.set_extent((260, 295, 25, 50))#, crs = zH5_crs)    # Set a title and show the plot
     ax13.set_extent((260, 295, 25, 50))#, crs = zH5_crs)    # Set a title and show the plot
     fig6.tight_layout()
-    plt.savefig(output_dir+'/HRRR_ex/ec_accum_ptype_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ec_accum_ptype_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax10.set_extent((281,295,39,49))#, crs = zH5_crs)    # Set a title and show the plot
     ax11.set_extent((281,295,39,49))#, crs = zH5_crs)    # Set a title and show the plot
     ax12.set_extent((281,295,39,49))#, crs = zH5_crs)    # Set a title and show the plot
     ax13.set_extent((281,295,39,49))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/HRRR_ex/ne_accum_ptype_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ne_accum_ptype_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax10.set_extent((289,291,43,45))
     ax10.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
     ax11.set_extent((289,291,43,45))
@@ -623,7 +610,7 @@ for i in range(1,49):
     ax12.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
     ax13.set_extent((289,291,43,45))
     ax13.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_accum_ptype_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_accum_ptype_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
 
@@ -643,12 +630,12 @@ for i in range(1,49):
     ax14.set_title('Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=14,loc='right')
 
     ax14.set_extent((260, 295, 25, 50))
-    plt.savefig(output_dir+'/HRRR_ex/ec_accum_ice_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ec_accum_ice_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax14.set_extent((281,295,39,49))
-    plt.savefig(output_dir+'/HRRR_ex/ne_accum_ice_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ne_accum_ice_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax14.set_extent((289,291,43,45))
     ax14.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_accum_ice_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_accum_ice_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
 
@@ -659,8 +646,8 @@ for i in range(1,49):
     ax15.add_feature(cfeature.BORDERS.with_scale('10m'))
     ax15.add_feature(cfeature.STATES.with_scale('10m'))
 
-    vis = ax15.contourf(x,y,vis,levels=[0.00625,0.125,0.25,0.5,0.75,1,2,3,4,5],extend='min',colors=['#ffb3ff','magenta','deeppink','hotpink','mediumvioletred','crimson','orangered','darkorange','orange','gold'],alpha=0.7)
-    cbr = fig.colorbar(vis,orientation = 'horizontal', aspect = 80, ax = ax15, pad = 0.01,
+    visc1 = ax15.contourf(x,y,vis,levels=[0.00625,0.125,0.25,0.5,0.75,1,2,3,4,5],extend='min',colors=['#ffb3ff','magenta','deeppink','hotpink','mediumvioletred','crimson','orangered','darkorange','orange','gold'],alpha=0.7)
+    cbr = fig.colorbar(visc1,orientation = 'horizontal', aspect = 80, ax = ax15, pad = 0.01,
                         extendrect=False, ticks = [0.00625,0.125,0.25,0.5,0.75,1,2,3,4,5], shrink=0.7)
     cbr.set_label('Surface Visibility (mi)')
     ax15.set_title('Surface Visibility')
@@ -668,12 +655,12 @@ for i in range(1,49):
     ax15.set_title('Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=14,loc='right')
 
     ax15.set_extent((260, 295, 25, 50))
-    plt.savefig(output_dir+'/HRRR_ex/ec_vis_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ec_vis_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax15.set_extent((281,295,39,49))
-    plt.savefig(output_dir+'/HRRR_ex/ne_vis_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ne_vis_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax15.set_extent((289,291,43,45))
     ax15.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_vis_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_vis_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
 
@@ -685,7 +672,7 @@ for i in range(1,49):
     ax16.add_feature(cfeature.STATES.with_scale('10m'))
 
     hgt_frz = ax16.contourf(x,y,hgt0c,cmap='rainbow',levels=range(0,10000,500),extend='max')
-    cbar2 = fig9.colorbar(hgt_frz,orientation='vertical', pad = 0.01, aspect = 50, ax = ax16, extendrect=False,shrink=0.7)
+    cbar2 = fig9.colorbar(hgt_frz,orientation='vertical', pad = 0.01, aspect = 50, ax = ax16, extendrect=False)
     cbr.set_label('Freezing Level Height (ft)')
 
     ax16.set_title('Freezing Level Height')
@@ -693,12 +680,81 @@ for i in range(1,49):
     ax16.set_title('Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=14,loc='right')
 
     ax16.set_extent((260, 295, 25, 50))
-    plt.savefig(output_dir+'/HRRR_ex/ec_frz_height_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ec_frz_height_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax16.set_extent((281,295,39,49))
-    plt.savefig(output_dir+'/HRRR_ex/ne_frz_height_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/ne_frz_height_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     ax16.set_extent((289,291,43,45))
     ax16.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
-    plt.savefig(output_dir+'/HRRR_ex/local_frz_height_'+dtfs+'.png')
+    plt.savefig(output_dir+'/HRRR_ex/local_frz_height_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    plt.close()
+    plt.clf()
+
+    fig10 = plt.figure(figsize=(15,15))
+    ax17 = fig10.add_subplot(111,projection=zH5_crs)
+    ax17.coastlines(resolution='10m')
+    ax17.add_feature(cfeature.BORDERS.with_scale('10m'))
+    ax17.add_feature(cfeature.STATES.with_scale('10m'))
+
+    blizc = ax17.contourf(x,y,blizzard,colors=['orange','magenta'],levels=[2,3])
+    ax17.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=6)
+    h_contour = ax17.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
+    h_contour.clabel(fontsize=14, colors='dimgray', inline=True, fmt='%i mb', rightside_up=True, use_clabeltext=True)
+
+    orange = mpatches.Patch(color='orange', label='Almost')
+    green = mpatches.Patch(color='white', label='Nope')
+    purple = mpatches.Patch(color='magenta',label='Yep!')
+    leg = ax17.legend(handles=[purple,orange,green],loc=4,framealpha=1)
+
+    ax17.set_title('Blizzard?',fontsize=16)
+    ax17.set_title('HRRR Init: '+init_time.dt.strftime('%m-%d %H:%MZ').item(),fontsize=14,loc='left')
+    ax17.set_title('Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=14,loc='right')
+
+    ax17.set_extent((260, 295, 25, 50))
+    plt.savefig(output_dir+'/HRRR_ex/ec_bliz_2_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    ax17.set_extent((281,295,39,49))
+    ax17.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=6)
+    plt.savefig(output_dir+'/HRRR_ex/ne_bliz_2_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    ax17.set_extent((289,291,43,45))
+    ax17.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=6)
+    ax17.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
+    plt.savefig(output_dir+'/HRRR_ex/local_bliz_2_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    plt.close()
+    plt.clf()
+
+    fig11 = plt.figure(figsize=(15,15))
+    ax18 = fig11.add_subplot(111,projection=zH5_crs)
+    ax18.coastlines(resolution='10m')
+    ax18.add_feature(cfeature.BORDERS.with_scale('10m'))
+    ax18.add_feature(cfeature.STATES.with_scale('10m'))
+
+    ax18.set_title('Blizzard Ingredients',fontsize=16)
+    ax18.set_title('HRRR Init: '+init_time.dt.strftime('%m-%d %H:%MZ').item(),fontsize=14,loc='left')
+    ax18.set_title('Valid: '+time.dt.strftime('%a %b %d %H:%MZ').item(),fontsize=14,loc='right')
+
+    swgc = ax18.contourf(x,y,swg, levels=range(0,60,5), cmap = 'hot')
+    sw3g = ax18.contour(x,y,swg,levels=[30],colors=['lime'],linewidths=2)
+    visc = ax18.contour(x,y,vis,levels=[0.25],colors=['violet'],linewidths=2)
+
+    try:
+        sn = ax18.contour(x,y,smoothedsnow,cmap='cool',levels=[15],linewidths=2)
+    except:
+        print('no snow')
+    cbar4 = fig.colorbar(swgc, orientation='horizontal',pad=0.01,ax=ax18, aspect = 50, extendrect=False, ticks = np.arange(0,70,10))
+    blue = mpatches.Patch(color='aqua',label='Snow')
+    lime = mpatches.Patch(color='lime', label='35 mph Gusts')
+    pink = mpatches.Patch(color='violet', label='1/4mi Visibility')
+    leg = ax18.legend(handles=[blue,lime,pink],loc=4,title='Blizzard Ingredients',framealpha=1)
+    cbar4.set_label('Surface Wind Gust (kts)')
+
+    ax18.set_extent((260, 295, 25, 50))
+    plt.savefig(output_dir+'/HRRR_ex/ec_bliz_ing_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    ax18.set_extent((281,295,39,49))
+    ax18.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=6)
+    plt.savefig(output_dir+'/HRRR_ex/ne_bliz_ing_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
+    ax18.set_extent((289,291,43,45))
+    ax18.barbs(x[wsl],y[wsl],u_10m[wsl,wsl],v_10m[wsl,wsl], length=6)
+    ax18.add_feature(USCOUNTIES.with_scale('5m'), edgecolor='dimgray')
+    plt.savefig(output_dir+'/HRRR_ex/local_bliz_ing_'+dtfs+'.png',bbox_inches='tight',pad_inches=0.1)
     plt.close()
     plt.clf()
 
