@@ -17,6 +17,8 @@ import metpy.calc as mpcalc
 import numpy.ma as ma
 from metpy.units import units
 import scipy.ndimage as ndimage
+import matplotlib.patches as mpatches
+import matplotlib.lines as lines
 
 def mkdir_p(mypath):
     '''Creates a directory. equivalent to using mkdir -p on the command line'''
@@ -110,7 +112,8 @@ for i in range(1,49):
         'hgt850mb':'h8',
         'gustsfc':'sfcgust',
         'pwatclm':'pwat',
-        'dptprs':'td'
+        'dptprs':'td',
+        'sbt123toa':'simsat'
     })
 
     catrain = data['catrain'].squeeze()
@@ -134,9 +137,9 @@ for i in range(1,49):
     td2m = ((td2m - 273.15)*(9./5.))+32.
     td2ms = ndimage.gaussian_filter(td2m,sigma=5,order=0)
 
-    hgt5 = data['h5'].squeeze()
-    hgt7 = data['h7'].squeeze()
-    hgt8 = data['h8'].squeeze()
+    hgt5 = h5 = data['h5'].squeeze()
+    hgt7 = h7 = data['h7'].squeeze()
+    hgt8 = h8 = data['h8'].squeeze()
 
     u2 = data['u'].sel(lev=round(250.0,0)).squeeze()*1.94384449
     v2 = data['v'].sel(lev=round(250.0,0)).squeeze()*1.94384449
@@ -170,19 +173,52 @@ for i in range(1,49):
     u8u = u8.values * units.knots
     v8u = v8.values * units.knots
 
-    print(np.shape(t7u))
-    print(np.shape(u7u))
-    print(np.shape(v7u))
-    print(np.shape(ds.lon))
-    print(np.shape(ds.lat))
-
     td7u = td7.values * units.degK
     rh7 = mpcalc.relative_humidity_from_dewpoint(t7u,td7u)
-    print(rh7)
-    #h7_fgen = mpcalc.frontogenesis(t7u,u7u,v7u,dx,dy,dim_order='xy')
-    #h7_fgen = h7_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
-    #print(h7_fgen)
+    u7k = u7*1.94384449
+    v7k = v7*1.94384449
+    t7c = t7-273.15
+    t7c = ndimage.gaussian_filter(t7c,sigma=2,order=0)
 
+    t7 = t7*units.K
+    u7 = u7*units.meters/units.seconds
+    v7 = v7*units.meters/units.seconds
+    h7 = h7*units.m
+
+    h7_fgen = mpcalc.frontogenesis(t7.data,u7.data,v7.data,dx,dy)
+    h7_fgen = h7_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
+    h7_fgen = ndimage.gaussian_filter(h7_fgen,sigma=2,order=0)
+
+    #850
+    u8k = u8*1.94384449
+    v8k = v8*1.94384449
+    t8c = t8-273.15
+    t8c = ndimage.gaussian_filter(t8c,sigma=2,order=0)
+
+    t8 = t8*units.K
+    u8 = u8*units.meters/units.seconds
+    v8 = v8*units.meters/units.seconds
+    h8 = h8*units.m
+
+    h8_fgen = mpcalc.frontogenesis(t8.data,u8.data,v8.data,dx,dy)
+    h8_fgen = h8_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
+    h8_fgen = ndimage.gaussian_filter(h8_fgen,sigma=2,order=0)
+
+    #925
+    u9k = u9*1.94384449
+    v9k = v9*1.94384449
+    t9c = t9-273.15
+    t9c = ndimage.gaussian_filter(t9c,sigma=2,order=0)
+
+    t9 = t9*units.K
+    u9 = u9*units.meters/units.seconds
+    v9 = v9*units.meters/units.seconds
+
+    h9_fgen = mpcalc.frontogenesis(t9.data,u9.data,v9.data,dx,dy)
+    h9_fgen = h9_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
+    h9_fgen = ndimage.gaussian_filter(h9_fgen,sigma=1,order=0)
+
+    simsat = data['simsat'].squeeze()
     pwat = data['pwat'].squeeze()*0.0393700787402
     cloudcover = data['tcc'].squeeze()
     reflectivity = data['radar'].squeeze()
@@ -198,6 +234,9 @@ for i in range(1,49):
     mslpc=ndimage.gaussian_filter(mslpc,sigma=3,order=0)
     wind_slice = slice(25,-25,25)
     wind_slice_s = slice(40,-40,40)
+    wind_slice = slice(36,-36,36)
+    wind_slice_ne = slice(18,-18,18)
+    wind_slice_me = slice(9,-9,9)
     u_10m = data['u'].squeeze()*1.94384449
     v_10m = data['v'].squeeze()*1.94384449
     wspd = ((u_10m**2)+(v_10m**2))**.5
@@ -211,8 +250,8 @@ for i in range(1,49):
     ax1 = fig.add_subplot(gs[:, 1], projection = zH5_crs)
     ax2 = fig.add_subplot(gs[0, 0], projection = zH5_crs)
     ax3 = fig.add_subplot(gs[1, 0], projection = zH5_crs)
-    ax4 = fig.add_subplot(gs[0, 2], projection = zH5_crs)
-    ax5 = fig.add_subplot(gs[1, 2], projection = zH5_crs)
+    ax5 = fig.add_subplot(gs[0, 2], projection = zH5_crs)
+    ax4 = fig.add_subplot(gs[1, 2], projection = zH5_crs)
 
     ax1.coastlines(resolution='10m')
     ax1.add_feature(cfeature.BORDERS.with_scale('10m'))
@@ -250,7 +289,6 @@ for i in range(1,49):
 
     m_contour = ax1.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=3)
     m_contour.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
-    #h5_contour = ax1.contour(x,y,hgt5,colors='gray',levels=range(4800,6000,60),linewidths=3)
 
     ref_levs = [1,5,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
 
@@ -283,24 +321,38 @@ for i in range(1,49):
     ax2.barbs(x[wind_slice_s],y[wind_slice_s],u2[wind_slice_s,wind_slice_s],v2[wind_slice_s,wind_slice_s],length=7)
 
     rhlevs = []
-    for j in range(1,35):
+    for j in range(1,30):
         lev = 0.69+0.01*j
         rhlevs.append(lev)
 
     ### AX3 = bottom left = 700mb
-    rhc = ax3.contourf(x,y,rh7, alpha = 0.7, cmap = 'winter_r',transform=zH5_crs, levels=rhlevs)
+    fc = ax3.contour(x,y,h7_fgen,alpha=0.7,colors='fuchsia',levels=range(4,60,4),linewidths=3)
+
+    rhc = ax3.contourf(x,y,rh7, alpha = 0.7, cmap = 'winter_r',transform=zH5_crs, levels=rhlevs,extend='max')
     h7c = ax3.contour(x,y,hgt7,colors='k',levels=range(2700,3300,30),linewidths=2)
     t7c = ax3.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='r',levels=range(0,18,3),linestyles='dashed',linewidths=2)
+    t80c = ax3.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='purple',levels=[0],linestyles='dashed',linewidths=2)
     t7c2 = ax3.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
     cbar3 = fig.colorbar(rhc,orientation='vertical',pad=0.01,shrink=.8,ax=ax3,aspect=50,extendrect=False,ticks=[0.7,0.8,0.9,1])
     cbar3.set_label('700mb RH',fontsize=14)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_purple_line = lines.Line2D([],[],linestyle='dashed',color='purple',label='Temperature (0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax3.legend(handles=[purple,dashed_blue_line,dashed_purple_line,dashed_red_line,black_line],loc=4,framealpha=1)
 
     ### AX4 = top right = 500mb
     #refp = ax4.contourf(x,y,reflectivity, levels=[20, 25, 30, 35, 40, 45, 50, 55, 60, 65], alpha = 0.7, cmap = 'Greens',transform=zH5_crs) #colors=['#0099ff00', '#4D8080ff', '#666666ff', '#804d4dff','#993333ff','#B33333ff','#CC1a1aff','#E60000ff','#0000e6','#0000cc','#0000b3','#2d00b3','#5900b3','#8600b3','#b300b3','#b30086'])
-    h5c = ax4.contour(x,y,hgt5,colors='k',levels=range(4800,6000,60),linewidths=2)
-    #cb = fig.colorbar(capep, orientation='vertical', pad = 0.01, aspect = 50, ax = ax4, extendrect=False, ticks=[100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000])
-    #cb.set_label('CAPE (J/kg)', size='large')
-    ax4.barbs(x[wind_slice_s],y[wind_slice_s],u5[wind_slice_s,wind_slice_s],v5[wind_slice_s,wind_slice_s],length=7)
+    ss = ax4.contourf(x,y,simsat,cmap='bone',levels=range(170,330,5),alpha=0.7)
+    h9c = ax4.contour(x,y,hgt5,colors='k',levels=range(300,1200,30),linewidths=2)
+    f9c = ax4.contour(x,y,h9_fgen,alpha=0.7,colors='fuchsia',levels=range(6,60,4),linewidths=3)
+    t9c = ax4.contour(x,y,ndimage.gaussian_filter(t9,sigma=5,order=0),colors='r',levels=range(0,18,3),linestyles='dashed',linewidths=2)
+    t90c = ax4.contour(x,y,ndimage.gaussian_filter(t9,sigma=5,order=0),colors='purple',levels=[0],linestyles='dashed',linewidths=2)
+    t9c2 = ax4.contour(x,y,ndimage.gaussian_filter(t9,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
+    cb = fig.colorbar(ss, orientation='vertical', pad = 0.01, aspect = 50, ax = ax4, extendrect=False, ticks=[100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000])
+    cb.set_label('Simulated Satellite')
+    ax4.barbs(x[wind_slice_s],y[wind_slice_s],u9[wind_slice_s,wind_slice_s],v9[wind_slice_s,wind_slice_s],length=7)
 
     #ax4.barbs(x[ws2],y[ws2],s5u[ws2,ws2],s5v[ws2,ws2], length = 7)
 
@@ -309,16 +361,21 @@ for i in range(1,49):
     for j in range(1,25):
         lev = 0.1*j
         pwlevs.append(lev)
-    print(np.max(pwat))
-    print(np.min(pwat))
-    print(pwlevs)
+
     pwatc = ax5.contourf(x,y,pwat, levels=pwlevs, cmap = 'BrBG',alpha=0.5)
     h8c = ax5.contour(x,y,ndimage.gaussian_filter(hgt8,sigma=5,order=0),colors='k',levels=range(1020,1800,30),linewidths=2)
-    t8c = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='r',levels=range(0,30,3),linestyles='dashed',linewidth=2)
+    t8c = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='r',levels=range(3,30,3),linestyles='dashed',linewidth=2)
+    t80c = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='purple',levels=[0],linestyles='dashed',linewidths=2)
     t8c2 = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidth=2)
-    cbar4 = fig.colorbar(pwatc, orientation='vertical',pad=0.01,ax=ax5, aspect = 50, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
+    cbar4 = fig.colorbar(pwatc, orientation='vertical',pad=0.01,ax=ax5, aspect = 50, shrink=0.8, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
     cbar4.set_label('Precipitable Water (in)')
-
+    ax5.contour(x,y,h8_fgen,alpha=0.7,colors='fuchsia',levels=range(4,60,4),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_purple_line = lines.Line2D([],[],linestyle='dashed',color='purple',label='Temperature (0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax5.legend(handles=[purple,dashed_blue_line,dashed_purple_line,dashed_red_line,black_line],loc=4,framealpha=1)
 
     #refp3 = ax4.contourf(x,y,reflectivity, levels=[20, 25, 30, 35, 40, 45, 50, 55, 60, 65], alpha = 0.7, cmap = 'Greens',transform=zH5_crs)
     #cbar4 = fig.colorbar(tccp,orientation='horizontal',pad=0.01,ax=ax4,aspect=50,extendrect=False)
@@ -341,10 +398,18 @@ for i in range(1,49):
     ax3.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax4.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax5.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-
-    plt.savefig(output_dir+'/HRRR_ex/ec_fivepanelwinter_p5_'+dtfs+'_.png')
+    #fig.canvas.draw()
+    fig.tight_layout()
+    plt.savefig(output_dir+'/HRRR_ex/EC_fivepanelwinter_pres1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    #ax1.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=7)
+    ax1.set_extent((281, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
+    ax2.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
+    ax3.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
+    ax4.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
+    ax5.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
+    plt.savefig(output_dir+'/HRRR_ex/NE_fivepanelwinter_pres1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
-    '''
+
     ### SECOND PLOT ###
     fig2 = plt.figure(figsize=(15,15))
     ax6 = fig2.add_subplot(111, projection = zH5_crs)
@@ -353,25 +418,26 @@ for i in range(1,49):
     ax6.add_feature(cfeature.BORDERS.with_scale('10m'))
     ax6.add_feature(cfeature.STATES.with_scale('10m'))
 
-    tmp_2m = ax6.contourf(x,y,t2m,cmap='RdYlBu_r', alpha = 0.8, levels = range(-20,100,5),transform=zH5_crs)
-    tmp_2m32 = ax6.contour(x,y,t2m,colors='b', alpha = 0.8, levels = [32])
-    cbr6 = fig2.colorbar(tmp_2m, orientation = 'horizontal', aspect = 80, ax = ax6, pad = 0.01,
-                        extendrect=False, ticks = range(-20,100,5))
-    cbr6.set_label('2m Temperature (F)', fontsize = 14)
+    fc = ax6.contour(x,y,h7_fgen,alpha=0.7,colors='fuchsia',levels=range(4,50,2),linewidths=3)
 
-    h_contour = ax6.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
-    h_contour.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
+    rhc = ax6.contourf(x,y,rh7, alpha = 0.7, cmap = 'winter_r',transform=zH5_crs, levels=rhlevs,extend='max')
+    h7c = ax6.contour(x,y,hgt7,colors='k',levels=range(2700,3300,30),linewidths=2)
+    t7c = ax6.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='r',levels=range(0,18,3),linestyles='dashed',linewidths=2)
+    t7c2 = ax6.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
+    cbar3 = fig.colorbar(rhc,orientation='vertical',pad=0.01,shrink=.8,ax=ax6,aspect=50,extendrect=False,ticks=[0.7,0.8,0.9,1])
+    cbar3.set_label('700mb RH',fontsize=14)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax6.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
 
-    ra = ax6.contourf(x,y,rain,cmap='Greens',levels=[1,5,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65],alpha=0.7)
-    sn = ax6.contourf(x,y,snow,cmap='cool',levels=[1,5,10,15,20, 25, 30, 35, 40, 45, 50],alpha=0.7)
-    ip = ax6.contourf(x,y,sleet,cmap='autumn',levels=[1,5,10,15,20, 25, 30, 35, 40, 45, 50],alpha=0.7)
-    zr = ax6.contourf(x,y,ice, cmap='RdPu',levels=[1,5,10,15,20, 25, 30, 35, 40, 45, 50],alpha=0.7)
-
-    ax6.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
 
     ax6.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-    ax6.set_title('HRRR Composite Forecast valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/HRRR_ex/NE_ptype_composite3_'+dtfs+'_.png')
+    ax6.set_title('HRRR 700mb Forecast valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
+    plt.savefig(output_dir+'/HRRR_ex/EC_700mb_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    ax6.set_extent((283, 295, 39, 49))
+    plt.savefig(output_dir+'/HRRR_ex/NE_700mb1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
     ### END SECOND PLOT ###
 
@@ -383,36 +449,23 @@ for i in range(1,49):
     ax7.add_feature(cfeature.BORDERS.with_scale('10m'))
     ax7.add_feature(cfeature.STATES.with_scale('10m'))
 
-    tprecip = ax7.contourf(x,y,total_precip, alpha = 0.7, cmap = 'cool',transform=zH5_crs, levels=[0.01,0.1,0.25,0.5,0.75,1.0,1.25,1.5,2.0,2.5,3,3.5,4,4.5,5])
-    tcprecip = ax7.contour(x,y,total_precip,colors=['b','darkblue','darkviolet'],levels=[0.5,1,1.5],linewidths=2)
-    cbar3 = fig3.colorbar(tprecip,orientation='vertical',pad=0.01,shrink=.8,ax=ax7,aspect=50,extendrect=False,ticks=[0.01,0.1,0.25,0.5,0.75,1.0,1.25,1.5,2.0,2.5,3,3.5,4,4.5,5])
-    cbar3.set_label('Total Precipitation (inches)',fontsize=14)
+    pwatc = ax7.contourf(x,y,pwat, levels=pwlevs, cmap = 'BrBG',alpha=0.5)
+    h8c = ax7.contour(x,y,ndimage.gaussian_filter(hgt8,sigma=5,order=0),colors='k',levels=range(1020,1800,30),linewidths=2)
+    t8c = ax7.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='r',levels=range(0,30,3),linestyles='dashed',linewidth=2)
+    t8c2 = ax7.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidth=2)
+    cbar4 = fig.colorbar(pwatc, orientation='vertical',pad=0.01,ax=ax7, aspect = 50, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
+    cbar4.set_label('Precipitable Water (in)')
+    ax7.contour(x,y,h8_fgen,alpha=0.7,colors='fuchsia',levels=range(4,50,2),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax7.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
+
 
     ax7.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-    ax7.set_title('HRRR Precipitation Forecast Valid Through ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/HRRR_ex/NE_total_precip3_'+dtfs+'_.png')
+    ax7.set_title('HRRR 850mb Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
+    plt.savefig(output_dir+'/HRRR_ex/EC_850mb_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    ax7.set_extent((283, 295, 39, 49))
+    plt.savefig(output_dir+'/HRRR_ex/NE_850mb1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
-
-    ### FOURTH PLOT ###
-    fig4 = plt.figure(figsize=(15,15))
-    ax8 = fig4.add_subplot(111,projection=zH5_crs)
-
-    ax8.coastlines(resolution='10m')
-    ax8.add_feature(cfeature.BORDERS.with_scale('10m'))
-    ax8.add_feature(cfeature.STATES.with_scale('10m'))
-
-    sfcwinds = ax8.contourf(x,y,wspd, cmap='PuRd', levels=range(5,60,5), alpha=0.75)
-    cbr = fig4.colorbar(sfcwinds, orientation = 'vertical', pad = 0.01, aspect = 25,
-                        panchor = (0.999,0.5), ax = ax8, extendrect=False, ticks = range(5,75,5), shrink = 0.80)
-    ax8.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
-    ax8.set_title('HRRR 10m Wind Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    ax8.set_extent((sub_w-1, sub_e-1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-
-    h_contouqr = ax8.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
-    h_contouqr.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
-
-    plt.savefig(output_dir+'/HRRR_ex/NE_wind3_'+dtfs+'_.png')
-    plt.clf()
-    '''
-    plt.close()
-    print(str(i)+'_Done!')
