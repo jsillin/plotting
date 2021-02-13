@@ -17,7 +17,8 @@ import metpy.calc as mpcalc
 import numpy.ma as ma
 from metpy.units import units
 import scipy.ndimage as ndimage
-
+import matplotlib.lines as lines
+import matplotlib.patches as mpatches
 def mkdir_p(mypath):
     '''Creates a directory. equivalent to using mkdir -p on the command line'''
 
@@ -136,6 +137,9 @@ for i in range(1,29):
     hgt7 = data['height'].sel(lev=round(700.0,0)).squeeze()
     hgt8 = data['height'].sel(lev=round(850.0,0)).squeeze()
 
+    h7=hgt7
+    h8=hgt8
+
     u2 = data['u'].sel(lev=round(250.0,0)).squeeze()*1.94384449
     v2 = data['v'].sel(lev=round(250.0,0)).squeeze()*1.94384449
     u5 = data['u'].sel(lev=round(500.0,0)).squeeze()*1.94384449
@@ -168,6 +172,36 @@ for i in range(1,29):
     u8u = u8.values * units.knots
     v8u = v8.values * units.knots
 
+    #700
+    u7k = u7*1.94384449
+    v7k = v7*1.94384449
+    t7c = t7-273.15
+    t7c = ndimage.gaussian_filter(t7c,sigma=2,order=0)
+
+    t7 = t7*units.K
+    u7 = u7*units.meters/units.seconds
+    v7 = v7*units.meters/units.seconds
+    h7 = h7*units.m
+
+    h7_fgen = mpcalc.frontogenesis(t7.data,u7.data,v7.data,dx,dy)
+    h7_fgen = h7_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
+    h7_fgen = ndimage.gaussian_filter(h7_fgen,sigma=2,order=0)
+
+    #850
+    u8k = u8*1.94384449
+    v8k = v8*1.94384449
+    t8c = t8-273.15
+    t8c = ndimage.gaussian_filter(t8c,sigma=2,order=0)
+
+    t8 = t8*units.K
+    u8 = u8*units.meters/units.seconds
+    v8 = v8*units.meters/units.seconds
+    h8 = h8*units.m
+
+    h8_fgen = mpcalc.frontogenesis(t8.data,u8.data,v8.data,dx,dy)
+    h8_fgen = h8_fgen*1000*100*3600*3 ##convert to units of K/100km/3hrs
+    h8_fgen = ndimage.gaussian_filter(h8_fgen,sigma=2,order=0)
+
     rh7 = data['rh'].sel(lev=round(700.0,0)).squeeze()
 
     av5 = data['avort'].sel(lev=round(500.0,0)).squeeze()*1e5
@@ -197,9 +231,10 @@ for i in range(1,29):
     swg = data['sfcgust'].squeeze()
 
     ########## SET UP FIGURE ##################################################
-    fig = plt.figure(figsize=(42,15))
+    fig = plt.figure(figsize=(43,15))
 
     gs = fig.add_gridspec(ncols=3,nrows= 2, width_ratios=[1,2,1])
+    gs.update(wspace=0.01, hspace=0.01)
     ax1 = fig.add_subplot(gs[:, 1], projection = zH5_crs)
     ax2 = fig.add_subplot(gs[0, 0], projection = zH5_crs)
     ax3 = fig.add_subplot(gs[1, 0], projection = zH5_crs)
@@ -236,7 +271,7 @@ for i in range(1,29):
     h8_0c = ax1.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='cornflowerblue',alpha=0.8,levels=[0],linewidths=3)
     h7_0c = ax1.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='lightsteelblue',alpha=0.8,levels=[0],linewidths=3)
     h8_wsc = ax1.contour(x,y,gaussian_filter(wspd8,sigma=5,order=0),cmap='YlOrRd',alpha=0.7,levels=range(40,90,10),linewidths=3)
-    cbr = fig.colorbar(tmp_2m, orientation = 'horizontal', aspect = 80, ax = ax1, pad = 0.01,
+    cbr = fig.colorbar(tmp_2m, orientation = 'horizontal', aspect = 80, ax = ax1, pad = 0.01, shrink = .7,
                         extendrect=False, ticks = range(-20,100,5))
     cbr.set_label('2m Temperature (F)', fontsize = 14)
 
@@ -266,11 +301,11 @@ for i in range(1,29):
     ax1.barbs(x[wind_slice],y[wind_slice],u8[wind_slice,wind_slice],v8[wind_slice,wind_slice], length=7)
     ax1.set_title('Precip Type, 2m Temperature (F), 850mb Winds (kts), and MSLP (mb)',fontsize=14)
     ax1.set_title('\n Valid: '+time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11,loc='right')
-    ax1.set_title('\n NAM Init: '+init_time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11,loc='left')
+    ax1.set_title('\n NAM Init: '+init_time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11)
 
     ### AX2 = top left = 200mb
     w2c = ax2.contourf(x,y,wspd2, alpha = 0.7,levels=range(50,200,5), cmap='Blues')#colors=['dimgray','gray','darkgray','slategrey','silver','lightgray'])
-    cbar2 = fig.colorbar(w2c,orientation='vertical',pad=0.01,ax=ax2,shrink=.8,aspect=50,extendrect=False, ticks=np.arange(50,200,20))
+    cbar2 = fig.colorbar(w2c,orientation='vertical',pad=0.01,ax=ax2,shrink=.7,aspect=50,extendrect=False, ticks=np.arange(50,200,20))
     cbar2.set_label('250mb Wind Speed (kts)',fontsize=14)
     ax2.barbs(x[wind_slice_s],y[wind_slice_s],u2[wind_slice_s,wind_slice_s],v2[wind_slice_s,wind_slice_s],length=7)
     h2c = ax2.contour(x,y,h2,colors='dimgray', levels = range(9000,11000,60),linewidths=1.5)
@@ -287,10 +322,17 @@ for i in range(1,29):
     t7c2 = ax3.contour(x,y,ndimage.gaussian_filter(t7,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
     cbar3 = fig.colorbar(rhc,orientation='vertical',pad=0.01,shrink=.8,ax=ax3,aspect=50,extendrect=False,ticks=[70,80,90,100])
     cbar3.set_label('700mb RH',fontsize=14)
+    ax3.contour(x,y,h7_fgen,alpha=0.7,colors='fuchsia',levels=range(4,50,2),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax3.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
+
 
     ### AX4 = top right = 500mb
     a5c = ax4.contourf(x,y,av5,cmap='autumn_r',levels=range(10,65,2),alpha=0.8)
-    a5cb = fig.colorbar(a5c, orientation = 'horizontal', aspect = 80, ax = ax4, pad = 0.01,
+    a5cb = fig.colorbar(a5c, orientation = 'vertical', aspect = 80, ax = ax4, pad = 0.01, shrink=.8,
                         extendrect=False, ticks = range(10,60,5))
     a5cb.set_label('500mb Absolute Vorticity ($s^{-1}$)', fontsize = 12)
     h5c = ax4.contour(x,y,hgt5,colors='k',levels=range(4800,6000,60),linewidths=2)
@@ -310,8 +352,14 @@ for i in range(1,29):
     h8c = ax5.contour(x,y,ndimage.gaussian_filter(hgt8,sigma=5,order=0),colors='k',levels=range(1020,1800,30),linewidths=2)
     t8c = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='r',levels=range(0,30,3),linestyles='dashed',linewidth=2)
     t8c2 = ax5.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
-    cbar4 = fig.colorbar(pwatc, orientation='vertical',pad=0.01,ax=ax5, aspect = 50, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
+    cbar4 = fig.colorbar(pwatc, orientation='vertical',shrink=0.8,pad=0.01,ax=ax5, aspect = 50, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
     cbar4.set_label('Precipitable Water (in)')
+    ax5.contour(x,y,h8_fgen,alpha=0.7,colors='fuchsia',levels=range(4,50,2),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax5.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
 
 
     #refp3 = ax4.contourf(x,y,reflectivity, levels=[20, 25, 30, 35, 40, 45, 50, 55, 60, 65], alpha = 0.7, cmap = 'Greens',transform=zH5_crs)
@@ -327,16 +375,15 @@ for i in range(1,29):
     sub_w1 = 269
     sub_w = 270
     sub_e = 294
-    sub_n = 49
+    sub_n = 50
     sub_s = 32
 
-    ax1.set_extent((sub_w1, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
+    ax1.set_extent((sub_w1-2, sub_e+2, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax2.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax3.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax4.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax5.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-
-    plt.savefig(output_dir+'/NAM/ec_fivepanelwinter_p3_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/NAM/ec_fivepanelwinter_v9_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
 
@@ -383,7 +430,7 @@ for i in range(1,29):
 
     ax6.set_extent((sub_w-1, sub_e+1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax6.set_title('NAM Composite Forecast valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/NAM/NE_ptype_composite1_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/NAM/NE_ptype_composite_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
     ### END SECOND PLOT ###
@@ -404,7 +451,7 @@ for i in range(1,29):
 
     ax7.set_extent((sub_w-1, sub_e+1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     ax7.set_title('NAM 250mb Forecast Valid ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
-    plt.savefig(output_dir+'/NAM/NE_250_1_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/NAM/NE_250_2_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
 
@@ -429,7 +476,15 @@ for i in range(1,29):
     h_contouqr = ax8.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
     h_contouqr.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
 
-    plt.savefig(output_dir+'/NAM/NE_700_1_'+dtfs+'_.png')
+    ax8.contour(x,y,h7_fgen,alpha=0.7,colors='fuchsia',levels=range(2,30,2),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax8.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
+
+
+    plt.savefig(output_dir+'/NAM/NE_700_2_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
 
@@ -452,7 +507,7 @@ for i in range(1,29):
 
     ax9.set_title('NAM 500mb Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
     ax9.set_extent((sub_w-1, sub_e+1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/NAM/NE_500_1_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/NAM/NE_500_2_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
 
@@ -473,12 +528,18 @@ for i in range(1,29):
     h8c = ax10.contour(x,y,ndimage.gaussian_filter(hgt8,sigma=5,order=0),colors='k',levels=range(1020,1800,30),linewidths=2)
     t8c = ax10.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='r',levels=range(0,30,3),linestyles='dashed',linewidth=2)
     t8c2 = ax10.contour(x,y,ndimage.gaussian_filter(t8,sigma=5,order=0),colors='b',levels=range(-54,-3,3),linestyles='dashed',linewidths=2)
+    ax10.contour(x,y,h8_fgen,alpha=0.7,colors='fuchsia',levels=range(2,30,2),linewidths=3)
+    purple = mpatches.Patch(color='fuchsia',label='Frontogenesis')
+    dashed_blue_line = lines.Line2D([], [], linestyle='dashed', color='b', label='Temperature (<0C)')
+    dashed_red_line = lines.Line2D([], [], linestyle='dashed', color='r', label='Temperature (>0C)')
+    black_line = lines.Line2D([], [], color='k', label='Geopotential Height')
+    leg = ax10.legend(handles=[purple,dashed_blue_line,dashed_red_line,black_line],loc=4,framealpha=1)
     cbar4 = fig.colorbar(pwatc, orientation='horizontal',pad=0.01,ax=ax10, aspect = 50, extendrect=False, ticks = [0.5,1,1.5,2,2.5])
     cbar4.set_label('Precipitable Water (in)')
     ax10.barbs(x[ws2r],y[ws2r],u8[ws2r,ws2r],v8[ws2r,ws2r], length=7)
     ax10.set_title('NAM 850mb Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
     ax10.set_extent((sub_w-1, sub_e+1, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/NAM/NE_850_1_'+dtfs+'_.png')
+    plt.savefig(output_dir+'/NAM/NE_850_2_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.01)
     plt.clf()
     plt.close()
     print(str(i)+'_Done!')
