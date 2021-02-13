@@ -19,61 +19,19 @@ from metpy.units import units
 import scipy.ndimage as ndimage
 import matplotlib.patches as mpatches
 import matplotlib.lines as lines
+import supplementary_tools as spt
 
-def mkdir_p(mypath):
-    '''Creates a directory. equivalent to using mkdir -p on the command line'''
-
-    from errno import EEXIST
-    from os import makedirs,path
-
-    try:
-        makedirs(mypath)
-    except OSError as exc: # Python >2.5
-        if exc.errno == EEXIST and path.isdir(mypath):
-            pass
-        else: raise
-
-startTime=datetime.now()
-
-year = startTime.year
-
-if startTime.month <10:
-    month = '0'+str(startTime.month)
-else:
-    month = str(startTime.month)
-
-if startTime.day <10:
-    day = '0'+str(startTime.day)
-else:
-    day = str(startTime.day)
-
-if startTime.hour <10:
-    hour = '0'+str(startTime.hour)
-else:
-    hour = str(startTime.hour)
-
-mdate = str(year)+str(month)+str(day)
-
-def get_init_hr(hour):
-    if int(hour) <3:
-        init_hour = '00'
-    elif int(hour) <9:
-        init_hour = '06'
-    elif int(hour) <15:
-        init_hour = '12'
-    elif int(hour) <21:
-        init_hour = '18'
-    else:
-        init_hour = '00'
-    return(init_hour)
-init_hour = get_init_hr(hour)
-url = 'http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr'+mdate+'/hrrr_sfc.t'+get_init_hr(hour)+'z'
+mdate = spt.get_init_time('HRRR')[0]
+init_hour = spt.get_init_time('HRRR')[1]
+url = 'http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr'+mdate+'/hrrr_sfc.t'+init_hour+'z'
+#url='http://nomads.ncep.noaa.gov:80/dods/hrrr/hrrr20201231/hrrr_sfc.t00z'
 print(url)
 
 # Create new directory
-output_dir = str(year)+str(month)+str(day)+'_'+str(init_hour)+'00'
-mkdir_p(output_dir)
-mkdir_p(output_dir+'/HRRR_ex')
+output_dir = mdate+'_'+init_hour+'00'
+#output_dir = '20201231_0000'
+spt.mkdir_p(output_dir)
+spt.mkdir_p(output_dir+'/HRRR_ex')
 #Parse data using MetPy
 ds = xr.open_dataset(url)
 init_hr = dt.datetime(int(year),int(month),int(day),int(init_hour))
@@ -400,14 +358,14 @@ for i in range(1,49):
     ax5.set_extent((sub_w, sub_e, sub_s, sub_n))#, crs = zH5_crs)    # Set a title and show the plot
     #fig.canvas.draw()
     fig.tight_layout()
-    plt.savefig(output_dir+'/HRRR_ex/EC_fivepanelwinter_pres1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    plt.savefig(output_dir+'/HRRR_ex/EC_fivepanelwinter_pres_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     #ax1.barbs(x[wind_slice_ne],y[wind_slice_ne],u_10m[wind_slice_ne,wind_slice_ne],v_10m[wind_slice_ne,wind_slice_ne], length=7)
     ax1.set_extent((281, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax2.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax3.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax4.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
     ax5.set_extent((283, 295, 39, 49))#, crs = zH5_crs)    # Set a title and show the plot
-    plt.savefig(output_dir+'/HRRR_ex/NE_fivepanelwinter_pres1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    plt.savefig(output_dir+'/HRRR_ex/NE_fivepanelwinter_pres_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
 
     ### SECOND PLOT ###
@@ -467,5 +425,5 @@ for i in range(1,49):
     ax7.set_title('HRRR 850mb Forecast Valid at ' + time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=24)
     plt.savefig(output_dir+'/HRRR_ex/EC_850mb_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     ax7.set_extent((283, 295, 39, 49))
-    plt.savefig(output_dir+'/HRRR_ex/NE_850mb1_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
+    plt.savefig(output_dir+'/HRRR_ex/NE_850mb_'+dtfs+'_.png',bbox_inches='tight',pad_inches=0.1)
     plt.clf()
