@@ -34,7 +34,6 @@ spt.mkdir_p(output_dir)
 spt.mkdir_p(output_dir+'/HRRR_ex')
 #Parse data using MetPy
 ds = xr.open_dataset(url)
-init_hr = dt.datetime(int(year),int(month),int(day),int(init_hour))
 times = ds['tmp2m'].metpy.time
 init_time = ds['time'][0]
 
@@ -44,8 +43,6 @@ lons = np.arange(260,310,0.25)
 total_precip=ds['apcpsfc'].isel(time=0).squeeze()*.0393700787402
 
 for i in range(1,49):
-    fc_hr = init_hr+dt.timedelta(hours=1*i)
-    forecast_hour = times[0].values
 
     data = ds.metpy.parse_cf()
     data = data.isel(time=i)

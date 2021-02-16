@@ -33,7 +33,6 @@ spt.mkdir_p(output_dir)
 spt.mkdir_p(output_dir+'/HRRR_ex')
 #Parse data using MetPy
 ds = xr.open_dataset(url)
-init_hr = dt.datetime(int(year),int(month),int(day),int(init_hour))
 times = ds['tmp2m'].metpy.time
 init_time = ds['time'][0]
 
@@ -69,8 +68,6 @@ acc_fram = spt.fram(acc_ice,spt.wet_bulb(t2mi,td2mi),ws10)
 print("INITIALIZATION SUCCESSFUL")
 
 for i in range(0,49):
-    fc_hr = init_hr+dt.timedelta(hours=1*i)
-    forecast_hour = times[0].values
 
     data = ds.metpy.parse_cf()
     data = data.isel(time=i)
