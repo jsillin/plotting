@@ -1,5 +1,6 @@
 from datetime import datetime
 import datetime as dt
+import numpy as np
 
 def get_init_time(model):
 
@@ -57,7 +58,22 @@ def get_init_time(model):
         else:
             init_hour = '18'
 
-    mdate = str(year)+str(month)+str(day)
+    if month <10:
+        month = '0'+str(month)
+    else:
+        month = str(month)
+
+    if day <10:
+        day = '0'+str(day)
+    else:
+        day = str(day)
+
+    if hour <10:
+        hour = '0'+str(hour)
+    else:
+        hour = str(hour)
+
+    mdate = str(year)+month+day
     output = [mdate,init_hour]
 
     return output
