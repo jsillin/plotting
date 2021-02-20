@@ -57,11 +57,19 @@ def get_init_time(model):
             init_hour = '12'
         else:
             init_hour = '18'
-
     elif model=='RTMA':
         minute = current_time.minute
         if minute>40:
             init_hour = current_time.hour
+        else:
+            time = current_time-dt.timedelta(hours=1)
+            init_hour = time.hour
+
+    elif model=='RAP':
+        minute = current_time.minute
+        if minute<10:
+            time = current_time-dt.timedelta(hours=2)
+            init_hour = time.hour
         else:
             time = current_time-dt.timedelta(hours=1)
             init_hour = time.hour
@@ -80,6 +88,11 @@ def get_init_time(model):
         hour = '0'+str(hour)
     else:
         hour = str(hour)
+
+    if init_hour <10:
+        init_hour = '0'+str(init_hour)
+    else:
+        init_hour = str(init_hour)
 
     mdate = str(year)+month+day
     output = [mdate,init_hour]
