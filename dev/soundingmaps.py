@@ -1,3 +1,8 @@
+'''
+This script hosts the function that plots soundings on maps.
+'''
+
+#### IMPORTS ####
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
@@ -9,8 +14,9 @@ from metpy.plots import SkewT
 import matplotlib.patches as mpatches
 import matplotlib.lines as lines
 import metpy.calc as mpcalc
+import supplementary_tools as spt
 
-def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
+def plot_soundings(fig,ax,temp,rh,sfc_pressure,centerlat,centerlon,domainsize,model,cape,wetbulb):
     '''
     This function will plot a bunch of little soundings onto a matplotlib fig,ax.
 
@@ -20,6 +26,8 @@ def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
     rh is an xarray dataarray with temperature data on pressure levels at least
     between 1000 and 300mb (you can change )
 
+    sfc_pressure is an xarray dataarray with surface pressure data (NOT MSLP!)
+
     centerlat and centerlon are the coordinates around which you want your map
     to be centered. both are floats or integers and are in degrees of latitude
     and degrees of longitude west (i.e. 70W would be input as positive 70 here)
@@ -27,8 +35,14 @@ def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
     domainsize is a string either 'local' for ~WFO-size domains or 'regional' for
     NE/SE/Mid-Atlantic-size domains (12 deg lat by 15 deg lon). More will be added soon.
 
+    model is a string that specifies which model is providing data for the plots.
+    This determines a few things, most importantly longitude selections. Models
+    currently supported are 'GFS','NAM',and 'RAP'
+
     cape is a boolean to indicate whether you want to overlay parcel paths and
     shade CAPE/CIN on soundings with >100 J/kg of CAPE (this value can be changed)
+
+    wetbulb is a boolean to indicate whether you want to draw wet bulb profiles
 
     note that this function doesn't "return" anything but if you just call it and
     provide the right arguments, it works.
@@ -40,6 +54,9 @@ def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
 
     '''
     r=5
+    # These variables make sure sounding data is spaced properly to line up with
+    # sounding displays
+
     if domainsize=='local':
         init_lat_delt = 1.625
         init_lon_delt = 0.45
@@ -54,6 +71,11 @@ def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
         londelt = 2.9
         startlon = centerlon-7.5+1.6
 
+    # Lon adjustment for GFS because it's [0,360] not [-180,180]
+    if model == 'GFS':
+        startlon = 360-startlon
+
+    # set lat/lon grid from which to pull data to plot soundings
     startlat = centerlat-init_lat_delt
 
     sound_lats=[]
@@ -63,80 +85,257 @@ def plot_soundings(fig,ax,temp,rh,centerlat,centerlon,domainsize,cape):
         sound_lats.append(lats)
 
     for i in range(0,r):
-        lons = -startlon-(londelt*i)
+        if model == 'GFS':
+            lons = startlon-(londelt*i)
+        else:
+            lons = -startlon-(londelt*i)
         sound_lons.append(lons)
 
+    # this sets how high each row of soundings is on the plot
     plot_elevs=[0.2,0.3,0.4,0.5,0.6,0.7]
 
+    # whole bunch of legend stuff
     dashed_red_line = lines.Line2D([], [], linestyle='solid', color='r', label='Temperature')
     dashed_purple_line = lines.Line2D([],[],linestyle='dashed',color='purple',label='0C Isotherm')
     dashed_green_line = lines.Line2D([], [], linestyle='solid', color='g', label='Dew Point')
+    dashed_pink_line = lines.Line2D([], [], linestyle='dashed', color = 'fuchsia', label='Surface-Based Parcel Path')
+    dashed_orange_line = lines.Line2D([], [], linestyle='dashed', color = 'orange', label='Most Unstable Parcel Path')
+    dashed_orangered_line = lines.Line2D([], [], linestyle='dashed', color = 'orangered', label='Mixed Layer Parcel Path')
+
     grey_line = lines.Line2D([], [], color='darkgray', label='MSLP (hPa)')
-    blue_line = lines.Line2D([], [], color='b',label='2m 0C Isotherm')
+    blue_line = lines.Line2D([], [], color='b',label='Wet Bulb')
     pink_line = lines.Line2D([], [], color='fuchsia',label='Surface-Based Parcel Path')
-    red = mpatches.Patch(color='tab:red',label='CAPE')
-    blue = mpatches.Patch(color='tab:blue',label='CIN')
+    teal_line = lines.Line2D([], [], linestyle='dashed',color='teal',label='HGZ')
+    green_dot = lines.Line2D([], [], marker='o', color='forestgreen',label='LCL')
+    black_dot = lines.Line2D([], [], marker='o', color='k',label='Sounding Origin')
+    orange_dot = lines.Line2D([], [], marker='o', color='darkorange',label='Most Unstable Parcel')
 
+    red = mpatches.Patch(color='tab:red',label='Mixed Layer CAPE')
+    blue = mpatches.Patch(color='tab:blue',label='Mixed Layer CIN')
+
+    # do the plotting based on user inputs
     if cape==True:
-        for k in range(len(plot_elevs)):
-            soundlat = sound_lats[k]
-            plot_elev = plot_elevs[k]
+        if wetbulb==True:
+            print('CAPE + Wetbulb')
+            for k in range(len(plot_elevs)):
+                soundlat = sound_lats[k]
+                plot_elev = plot_elevs[k]
 
-            if k==0:
-                s=1
-            else:
-                s=0
+                if k<2:
+                    s=1
+                else:
+                    s=0
 
-            for i in range(s,r):
-                sound_pres = temp.lev
-                soundlon = -(startlon+(londelt*i))
-                sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
-                sound_rh = rh.interp(lat=soundlat,lon=soundlon)
-                print(sound_rh)
-                print(sound_temps)
-                sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
-                skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
+                for i in range(s,r):
+                    levs_abv_ground = []
+                    soundlon = sound_lons[i]
+                    sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
+                    sound_rh = rh.interp(lat=soundlat,lon=soundlon)
+                    sound_pres = temp.lev
+                    spres = sfc_pressure.interp(lat=soundlat,lon=soundlon)
+                    sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
+                    sound_wb = mpcalc.wet_bulb_temperature(sound_pres,sound_temps.data*units.degC,sound_dp)
 
-                parcel_prof = mpcalc.parcel_profile(sound_pres,sound_temps[0].data*units.degC,sound_dp[0])
-                cape = mpcalc.cape_cin(sound_pres,sound_temps.data*units.degC,sound_dp,parcel_prof)
-                capeout = int(cape[0].m)
-                cinout = int(cape[1].m)
+                    print(spres)
+                    print(sound_pres)
 
-                skew.plot(sound_pres,sound_dp,'g',linewidth=3)
-                skew.plot(sound_pres,sound_temps,'r',linewidth=3)
+                    #Only want data above the ground
+                    abv_sfc_temp = spt.mask_below_terrain(spres,sound_temps,sound_pres)[0]
+                    abv_sfc_dewp = spt.mask_below_terrain(spres,sound_dp,sound_pres)[0]
+                    abv_sfc_wetb = spt.mask_below_terrain(spres,sound_wb,sound_pres)[0]
+                    abv_sfc_relh = spt.mask_below_terrain(spres,sound_rh,sound_pres)[0]
+                    pres_abv_ground = spt.mask_below_terrain(spres,sound_temps,sound_pres)[1]
 
-                if capeout >100:
-                    # Shade areas of CAPE and CIN
-                    skew.shade_cin(sound_pres, sound_temps.data*units.degC, parcel_prof)
-                    skew.shade_cape(sound_pres, sound_temps.data*units.degC, parcel_prof)
-                    skew.plot(sound_pres,parcel_prof,color='fuchsia',linewidth=1)
+                    #print(pres_abv_ground)
+                    #print(abv_sfc_dewp)
+                    #print(abv_sfc_relh)
+                    #print(abv_sfc_temp)
 
-                skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
-                skew.ax.set_ylim((1000,300))
-                skew.ax.axis('off')
+                    mix_ratio = mpcalc.mixing_ratio_from_relative_humidity(pres_abv_ground,abv_sfc_temp.data*units.degC,abv_sfc_relh/100)
+                    virtual_temperature = mpcalc.virtual_temperature(abv_sfc_temp.data*units.degC,mix_ratio)
+                    surface_virtual_temperature = virtual_temperature[0]
+                    #print(virtual_temperature)
+                    print(pres_abv_ground)
+                    muparcel = mpcalc.most_unstable_parcel(pres_abv_ground,abv_sfc_temp.data*units.degC,abv_sfc_dewp)
+                    print(muparcel[0].m)
 
-        leg = ax.legend(handles=[dashed_red_line,dashed_green_line,dashed_purple_line,pink_line,red,blue],title='Sounding Legend',loc=4,framealpha=1)
+                    mupressures = spt.mask_below_terrain(muparcel[0].m,abv_sfc_temp,pres_abv_ground.m)[1]
+                    mutemps = spt.mask_below_terrain(muparcel[0].m,abv_sfc_temp,pres_abv_ground.m)[0]
+                    mudews = spt.mask_below_terrain(muparcel[0].m,abv_sfc_dewp,pres_abv_ground.m)[0]
+                    print(muparcel)
+
+                    #sound_wb = sound_wb*units.degC
+                    skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
+                    print(mupressures,mutemps,mudews)
+
+                    mu_parcel_prof = mpcalc.parcel_profile(mupressures,muparcel[1],muparcel[2])
+                    try:
+                        mucape = mpcalc.cape_cin(mupressures,mutemps.data*units.degC,mudews,mu_parcel_prof)
+                        capeout = int(mucape[0].m)
+                        cinout = int(mucape[1].m)
+                        mufail = False
+                    except:
+                        print('no mucape')
+                        parcel_prof = mpcalc.parcel_profile(pres_abv_ground,abv_sfc_temp[0].data*units.degC,abv_sfc_dewp[0])
+
+                        cape = mpcalc.cape_cin(pres_abv_ground,abv_sfc_temp.data*units.degC,abv_sfc_dewp,parcel_prof)
+                        capeout = int(cape[0].m)
+                        cinout = int(cape[1].m)
+                        mu_parcel_prof = parcel_prof
+                        mu_cape = cape
+                        mufail = True
+
+                    #skew.ax.axvspan(-30, -10, color='cyan', alpha=0.4)
+
+                    skew.plot(pres_abv_ground,abv_sfc_wetb,'b',linewidth=2)
+                    skew.plot(pres_abv_ground,abv_sfc_dewp,'g',linewidth=3)
+                    skew.plot(pres_abv_ground,abv_sfc_temp,'r',linewidth=3)
+
+                    if capeout >100:
+                        sb_parcel_prof = mpcalc.parcel_profile(pres_abv_ground,surface_virtual_temperature,abv_sfc_dewp[0])
+                        ml_parcel = mpcalc.mixed_parcel(pres_abv_ground,abv_sfc_temp.data*units.degC,abv_sfc_dewp)
+                        ml_parcel_prof = mpcalc.parcel_profile(pres_abv_ground,ml_parcel[1],ml_parcel[2])
+                        print(ml_parcel_prof)
+                        # Shade areas of CAPE and CIN
+
+                        skew.shade_cin(pres_abv_ground, abv_sfc_temp.data*units.degC, ml_parcel_prof)
+                        skew.shade_cape(pres_abv_ground, abv_sfc_temp.data*units.degC, ml_parcel_prof)
+
+                        skew.plot(pres_abv_ground,sb_parcel_prof,color='fuchsia',linewidth=1.5,linestyle='--')
+                        if mufail == False:
+                            skew.plot(mupressures,mu_parcel_prof,color='orange',linewidth=1.5,linestyle='--')
+                        skew.plot(pres_abv_ground,ml_parcel_prof,color='orangered',linewidth=1.5)
+
+                        lcl_pressure, lcl_temperature = mpcalc.lcl(pres_abv_ground[0], abv_sfc_temp.data[0]*units.degC, abv_sfc_dewp[0])
+                        skew.plot(lcl_pressure, lcl_temperature, 'ko', markerfacecolor='forestgreen')
+                        skew.ax.axvline(-30, color='teal', linestyle='--', linewidth=1)
+                        skew.ax.axvline(-10, color='teal', linestyle='--', linewidth=1)
+                        if mufail == False:
+                            skew.plot(muparcel[0],muparcel[1],'ko',markerfacecolor='darkorange')
+
+                    skew.plot(975,0, 'ko',markerfacecolor='k')
+
+                    skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
+                    skew.ax.set_ylim((1000,300))
+                    skew.ax.axis('off')
+
+            leg = ax.legend(handles=[dashed_red_line,dashed_green_line,blue_line,dashed_purple_line,teal_line,dashed_orangered_line,dashed_orange_line,dashed_pink_line,red,blue,orange_dot,green_dot,black_dot],title='Sounding Legend',loc=4,framealpha=1)
+
+        else:
+            print('CAPE no wetbulb')
+            for k in range(len(plot_elevs)):
+                soundlat = sound_lats[k]
+                plot_elev = plot_elevs[k]
+
+                if k==0:
+                    s=1
+                else:
+                    s=0
+
+                for i in range(s,r):
+                    levs_abv_ground = []
+                    soundlon = sound_lons[i]
+                    sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
+                    sound_rh = rh.interp(lat=soundlat,lon=soundlon)
+                    sound_pres = temp.lev
+                    spres = sfc_pressure.interp(lat=soundlat,lon=soundlon)
+                    sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
+
+                    abv_sfc_temp = spt.mask_below_terrain(spres,sound_temps,sound_pres)[0]
+                    abv_sfc_dewp = spt.mask_below_terrain(spres,sound_dp,sound_pres)[0]
+                    pres_abv_ground = spt.mask_below_terrain(spres,sound_temps,sound_pres)[1]
+
+                    skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
+
+                    parcel_prof = mpcalc.parcel_profile(pres_abv_ground,abv_sfc_temp[0].data*units.degC,abv_sfc_dewp[0])
+                    cape = mpcalc.cape_cin(pres_abv_ground,abv_sfc_temp.data*units.degC,abv_sfc_dewp,parcel_prof)
+                    capeout = int(cape[0].m)
+                    cinout = int(cape[1].m)
+
+                    skew.plot(pres_abv_ground,abv_sfc_dewp,'g',linewidth=3)
+                    skew.plot(pres_abv_ground,abv_sfc_temp,'r',linewidth=3)
+
+                    if capeout >100:
+                        # Shade areas of CAPE and CIN
+                        skew.shade_cin(pres_abv_ground, abv_sfc_temp.data*units.degC, parcel_prof)
+                        skew.shade_cape(pres_abv_ground, abv_sfc_temp.data*units.degC, parcel_prof)
+                        skew.plot(pres_abv_ground,parcel_prof,color='fuchsia',linewidth=1)
+                        print(abv_sfc_temp)
+                        lcl_pressure, lcl_temperature = mpcalc.lcl(pres_abv_ground[0], abv_sfc_temp.data[0]*units.degC, abv_sfc_dewp[0])
+                        skew.plot(lcl_pressure, lcl_temperature, 'ko', markerfacecolor='forestgreen')
+                        skew.ax.axvline(-30, color='teal', linestyle='--', linewidth=1)
+                        skew.ax.axvline(-10, color='teal', linestyle='--', linewidth=1)
+
+                    skew.plot(975,0, 'ko',markerfacecolor='k')
+
+                    skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
+                    skew.ax.set_ylim((1000,300))
+                    skew.ax.axis('off')
+
+            leg = ax.legend(handles=[dashed_red_line,dashed_green_line,dashed_purple_line,teal_line,green_dot,pink_line,red,blue,black_dot],title='Sounding Legend',loc=4,framealpha=1)
 
     else:
-        for k in range(len(plot_elevs)):
-            soundlat = sound_lats[k]
-            plot_elev = plot_elevs[k]
+        if wetbulb==True:
+            print('Wetbulb no CAPE')
+            for k in range(len(plot_elevs)):
+                soundlat = sound_lats[k]
+                plot_elev = plot_elevs[k]
 
-            if k==0:
-                s=1
-            else:
-                s=0
+                if k==0:
+                    s=1
+                else:
+                    s=0
 
-            for i in range(s,r):
-                soundlon = -(startlon+(londelt*i))
-                sound_pres = temp.lev
-                sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
-                sound_rh = rh.interp(lat=soundlat,lon=soundlon)
-                sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
-                skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
-                skew.plot(sound_pres,sound_dp,'g',linewidth=3)
-                skew.plot(sound_pres,sound_temps,'r',linewidth=3)
-                skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
-                skew.ax.set_ylim((1000,300))
-                skew.ax.axis('off')
-        leg = ax.legend(handles=[dashed_red_line,dashed_green_line,dashed_purple_line],title='Sounding Legend',loc=4,framealpha=1)
+                for i in range(s,r):
+                    levs_abv_ground = []
+                    soundlon = sound_lons[i]
+                    sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
+                    sound_rh = rh.interp(lat=soundlat,lon=soundlon)
+                    sound_pres = temp.lev
+                    spres = sfc_pressure.interp(lat=soundlat,lon=soundlon)
+
+                    sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
+
+                    sound_wb = mpcalc.wet_bulb_temperature(sound_pres,sound_temps.data*units.degC,sound_dp)
+
+                    abv_sfc_temp = spt.mask_below_terrain(spres,sound_temps,sound_pres)[0]
+                    abv_sfc_dewp = spt.mask_below_terrain(spres,sound_dp,sound_pres)[0]
+                    abv_sfc_wetb = spt.mask_below_terrain(spres,sound_wb,sound_pres)[0]
+                    pres_abv_ground = spt.mask_below_terrain(spres,sound_temps,sound_pres)[1]
+
+                    #sound_wb = sound_wb*units.degC
+                    skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
+
+                    skew.plot(pres_abv_ground,abv_sfc_wetb,'b',linewidth=2)
+                    skew.plot(pres_abv_ground,abv_sfc_dewp,'g',linewidth=3)
+                    skew.plot(pres_abv_ground,abv_sfc_temp,'r',linewidth=3)
+
+                    skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
+                    skew.ax.set_ylim((1000,300))
+                    skew.ax.axis('off')
+        else:
+            print('No Wetbulb or CAPE')
+            for k in range(len(plot_elevs)):
+                soundlat = sound_lats[k]
+                plot_elev = plot_elevs[k]
+
+                if k==0:
+                    s=1
+                else:
+                    s=0
+
+                for i in range(s,r):
+                    sound_pres = temp.lev
+                    sound_temps = temp.interp(lat=soundlat,lon=soundlon)-273.15
+                    sound_rh = rh.interp(lat=soundlat,lon=soundlon)
+                    sound_dp = mpcalc.dewpoint_from_relative_humidity(sound_temps.data*units.degC,sound_rh.data*units.percent)
+                    skew = SkewT(fig=fig,rect=(0.75-(0.15*i),plot_elev,.15,.1))
+                    skew.plot(sound_pres,sound_dp,'g',linewidth=3)
+                    skew.plot(sound_pres,sound_temps,'r',linewidth=3)
+                    skew.plot(1000,0, 'ko',markerfacecolor='k')
+
+                    skew.ax.axvline(0, color='purple', linestyle='--', linewidth=3)
+                    skew.ax.set_ylim((1000,300))
+                    skew.ax.axis('off')
+
+            leg = ax.legend(handles=[dashed_red_line,dashed_green_line,blue_line,dashed_purple_line,black_dot],title='Sounding Legend',loc=4,framealpha=1)

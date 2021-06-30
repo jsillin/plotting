@@ -208,12 +208,16 @@ for i in range(2,120):
     ice = np.ma.masked_where(catice==0,new_precip)
     snow = np.ma.masked_where(snowc==0,new_precip)
 
+    refrain = np.ma.masked_where(rainc==0,reflectivity)
+    refsleet = np.ma.masked_where(catsleet==0,reflectivity)
+    refice = np.ma.masked_where(catice==0,reflectivity)
+    refsnow = np.ma.masked_where(snowc==0,reflectivity)
+
     #Generate running accumulation total arrays for each ptype
     acc_snow = acc_snow+snow.filled(0)
     acc_sleet = acc_sleet+sleet.filled(0)
     acc_ice = acc_ice+ice.filled(0)
     acc_rain = acc_rain+rain.filled(0)
-
 
     #Smooth rain
     rain = ndimage.gaussian_filter(rain,sigma=1,order=0)
@@ -247,14 +251,14 @@ for i in range(2,120):
 
 
     ########## PLOTTING #######################################################
-    tmp_2m = ax1.contourf(x,y,t2m,cmap='RdYlBu_r', alpha = 0.8, levels = range(-20,100,5),transform=zH5_crs)
+    #tmp_2m = ax1.contourf(x,y,t2m,cmap='RdYlBu_r', alpha = 0.8, levels = range(-20,100,5),transform=zH5_crs)
     tmp_2m32 = ax1.contour(x,y,t2m,colors='b', alpha = 0.8, levels = [32])
-    cbr = fig.colorbar(tmp_2m, orientation = 'horizontal', aspect = 80, ax = ax1, pad = 0.01,
-                        extendrect=False, ticks = range(-20,100,5))
-    cbr.set_label('2m Temperature (F)', fontsize = 14)
+    #cbr = fig.colorbar(tmp_2m, orientation = 'horizontal', aspect = 80, ax = ax1, pad = 0.01,
+    #                    extendrect=False, ticks = range(-20,100,5))
+    #cbr.set_label('2m Temperature (F)', fontsize = 14)
 
-    h_contour = ax1.contour(x, y, mslpc, colors='dimgray', levels=range(940,1040,4),linewidths=2)
-    h_contour.clabel(fontsize=14, colors='dimgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
+    h_contour = ax1.contour(x, y, mslpc, colors='lightgray', levels=range(940,1040,4),linewidths=2)
+    h_contour.clabel(fontsize=14, colors='lightgray', inline=1, inline_spacing=4, fmt='%i mb', rightside_up=True, use_clabeltext=True)
 
     ref_levs = [1,5,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
     q_levs = [0.01,0.05,0.1,0.25,0.5,0.75,1,1.25]
@@ -271,25 +275,26 @@ for i in range(2,120):
     qip_cols = ['#eeccff','#dd99ff','#cc66ff','#bb33ff','#aa00ff','#8800cc','#660099','#440066','#6600cc','#9933ff','#bf80ff','#e6ccff','#ffffff']
     q_levs_r = [0.01,0.05,0.1,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3]
     try:
-        ra = ax1.contourf(x,y,rain,colors=qr_cols,levels=q_levs,alpha=0.7)
+        ra = ax1.contourf(x,y,refrain,colors=qr_cols,levels=ref_levs,alpha=0.7)
     except:
         print('no rain')
     try:
-        sn = ax1.contourf(x,y,snow,colors=qs_cols,levels=q_levs,alpha=0.7)
+        sn = ax1.contourf(x,y,refsnow,colors=qs_cols,levels=ref_levs,alpha=0.7)
     except:
         print('no snow')
     try:
-        ip = ax1.contourf(x,y,sleet,colors=qi_cols,levels=q_levs,alpha=0.7)
+        ip = ax1.contourf(x,y,refsleet,colors=qi_cols,levels=ref_levs,alpha=0.7)
     except:
         print('no sleet')
     try:
-        zr = ax1.contourf(x,y,ice, colors=qz_cols,levels=q_levs,alpha=0.7)
+        zr = ax1.contourf(x,y,refice, colors=qz_cols,levels=ref_levs,alpha=0.7)
     except:
         print('no ice')
     ax1.barbs(x[wind_slice],y[wind_slice],u_10m[wind_slice,wind_slice],v_10m[wind_slice,wind_slice], length=7)
-    ax1.set_title('Precip Type, 2m Temperature (F), 10m Winds (kts), and MSLP (mb)',fontsize=16)
+    ax1.set_title('Precip Type, 10m Winds (kts), and MSLP (mb)',fontsize=16)
     ax1.set_title('\n Valid: '+time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11,loc='right')
     ax1.set_title('\n Init: '+init_time.dt.strftime('%Y-%m-%d %H:%MZ').item(),fontsize=11,loc='left')
+    ax1.set_facecolor('dimgray')
     ax1.set_extent((265, 300, 25, 50))#, crs = zH5_crs)    # Set a title and show the plot
     plt.savefig(output_dir+'/GFS_para/ec_hrly_pytpe_'+dtfs+'.png')
     ax1.set_extent((281,295,39,49))

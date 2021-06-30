@@ -33,8 +33,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 #station = input("Enter Station Code: ")
 #dt = datetime(year, month, day, hour)
 
-dt = datetime(2018,3,3,00)
-station = 'OKX'
+dt = datetime(2013,5,31,12)
+station = 'OUN'
 
 ######################################################################
 # Grab Remote Data
@@ -46,7 +46,7 @@ station = 'OKX'
 
 # Read remote sounding data based on time (dt) and station
 df = WyomingUpperAir.request_data(dt, station)
-
+#df.to_csv('eas2900_final_sounding2.csv')
 # Create dictionary of united arrays
 data = pandas_dataframe_to_unit_arrays(df)
 
@@ -54,17 +54,17 @@ print(df)
 ######################################################################
 # Isolate variables and attach units
 #
-
+top = 100
 # Isolate united arrays from dictionary to individual variables
-p = data['pressure'][:29]
-T = data['temperature'][:29]
-Td = data['dewpoint'][:29]
-u = data['u_wind'][:29]
-v = data['v_wind'][:29]
-h = data['height'][:29]
+p = data['pressure'][:top]
+T = data['temperature'][:top]
+Td = data['dewpoint'][:top]
+u = data['u_wind'][:top]
+v = data['v_wind'][:top]
+h = data['height'][:top]
 
-wind_speed = df['speed'][:29].values * units.knots
-wind_dir = df['direction'][:29].values * units.degrees
+wind_speed = df['speed'][:top].values * units.knots
+wind_dir = df['direction'][:top].values * units.degrees
 u, v = mpcalc.wind_components(wind_speed, wind_dir)
 ######################################################################
 # Make Skew-T Plot
@@ -111,8 +111,8 @@ skew.plot(p, Td, 'g')
 skew.plot_barbs(p[::3], u[::3], v[::3], y_clip_radius=0.03)
 
 # Set some appropriate axes limits for x and y
-skew.ax.set_xlim(-10, 15)
-skew.ax.set_ylim(1020, 500)
+skew.ax.set_xlim(-40, 40)
+skew.ax.set_ylim(1020, 100)
 
 # Add the relevant special lines to plot throughout the figure
 skew.plot_dry_adiabats(t0=np.arange(233, 533, 10) * units.K,
@@ -161,5 +161,5 @@ plt.title('Valid Time: {}'.format(dt), loc='right')
 #               verticalalignment='bottom', bbox=dict(facecolor='white', ec = 'black'),  transform=skew.ax.transAxes, zorder = 1000)
 
 # Show the plot
-plt.show()
-#plt.savefig('ILX_5_15.png')
+#plt.show()
+plt.savefig('elreno.png')

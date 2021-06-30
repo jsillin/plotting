@@ -77,7 +77,7 @@ else:
 if int(hour)<20:
     mdate = str(year)+str(month)+str(day)
 else:
-    mdate = str(year)+str(month)+str(day+1)
+    mdate = str(year)+str(month)+str(int(day)+1)
 
 def get_init_hr(hour):
     if int(hour) <5:

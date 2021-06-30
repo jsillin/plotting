@@ -61,6 +61,7 @@ td2m = rtma_data['dpt2m'].squeeze()
 t2m = rtma_data['tmp2m'].squeeze()
 u10m = rtma_data['ugrd10m'].squeeze()*1.94384449
 v10m = rtma_data['vgrd10m'].squeeze()*1.94384449
+sfc_pressure = rap_data['pressfc'].squeeze()/100
 
 t2m = ((t2m - 273.15)*(9./5.))+32.
 td2m = ((td2m - 273.15)*(9./5.))+32.
@@ -97,7 +98,7 @@ elif domainsize=='local':
 
 ax1.barbs(x[wind_slice],y[wind_slice],u10m[wind_slice,wind_slice],v10m[wind_slice,wind_slice], length=6,color='gray')
 
-smap.plot_soundings(fig,ax1,prs_temps,prs_relh,centerlat,centerlon,domainsize,cape=True)
+smap.plot_soundings(fig,ax1,prs_temps,prs_relh,sfc_pressure,centerlat,centerlon,domainsize,'RAP',cape=True,wetbulb=True)
 
 ax1.set_extent((west,east,south,north))
 
